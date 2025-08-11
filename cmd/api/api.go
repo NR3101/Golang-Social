@@ -26,7 +26,19 @@ type config struct {
 	db          dbConfig
 	env         string
 	mail        mailConfig
-	frontendURL string // URL for the frontend application
+	frontendURL string     // URL for the frontend application
+	auth        authConfig // authentication configuration
+}
+
+// authConfig struct holds the authentication configuration
+type authConfig struct {
+	basic basicAuthConfig // configuration for basic authentication
+}
+
+// basicAuthConfig struct holds the basic authentication configuration
+type basicAuthConfig struct {
+	username string // username for basic authentication
+	password string // password for basic authentication
 }
 
 // mailConfig struct holds the email configuration
@@ -70,8 +82,8 @@ func (app *application) mount() http.Handler {
 
 	// Group routes under /v1
 	r.Route("/v1", func(r chi.Router) {
-		// GET endpoint for health check
-		r.Get("/health", app.healthCheckHandler) // Health check endpoint
+		// GET endpoint for health check with basic authentication
+		r.With(app.BasicAuthMiddleware()).Get("/health", app.healthCheckHandler) // Health check endpoint
 
 		// Routes related to posts
 		r.Route("/posts", func(r chi.Router) {

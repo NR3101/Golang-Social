@@ -26,3 +26,20 @@ func (app *application) notFoundError(w http.ResponseWriter, r *http.Request, er
 
 	writeJSONError(w, http.StatusNotFound, "the requested resource could not be found")
 }
+
+// unauthorizedError handles unauthorized errors and writes a JSON response.
+func (app *application) unauthorizedError(w http.ResponseWriter, r *http.Request, err error) {
+	app.logger.Errorw("unauthorized error", "method", r.Method, "path", r.URL.Path, "error", err.Error())
+
+	writeJSONError(w, http.StatusUnauthorized, "unauthorized access to the requested resource")
+}
+
+// unauthorizedBasicAuthError handles unauthorized errors and writes a JSON response for basic authentication.
+func (app *application) unauthorizedBasicAuthError(w http.ResponseWriter, r *http.Request, err error) {
+	app.logger.Errorw("unauthorized basic error", "method", r.Method, "path", r.URL.Path, "error", err.Error())
+
+	// Set the WWW-Authenticate header to indicate that basic authentication is required so that we get a popup in the browser
+	w.Header().Set("WWW-Authenticate", `Basic realm="Restricted", charset="UTF-8"`)
+
+	writeJSONError(w, http.StatusUnauthorized, "unauthorized access to the requested resource")
+}
