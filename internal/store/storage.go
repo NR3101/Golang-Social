@@ -26,7 +26,8 @@ type Storage struct {
 
 	// Users provides methods for managing users.
 	Users interface {
-		GetByID(context.Context, string) (*User, error)
+		GetByID(context.Context, string) (*User, error)                      // Get user by ID
+		GetByEmail(context.Context, string) (*User, error)                   // Get user by email
 		Create(context.Context, *sql.Tx, *User) error                        // Create a user
 		Delete(context.Context, int64) error                                 // Delete a user
 		CreateAndInvite(context.Context, *User, string, time.Duration) error // Create a user and send an invitation email

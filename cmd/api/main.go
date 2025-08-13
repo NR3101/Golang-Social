@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/NR3101/social/internal/auth"
 	"github.com/NR3101/social/internal/db"
 	"github.com/NR3101/social/internal/env"
 	"github.com/NR3101/social/internal/mailer"
@@ -38,6 +39,11 @@ func main() {
 				username: env.GetString("BASIC_AUTH_USERNAME", "admin"),
 				password: env.GetString("BASIC_AUTH_PASSWORD", "admin"),
 			},
+			token: tokenAuthConfig{
+				secret: env.GetString("TOKEN_SECRET", "averylongandsupersecuresecretkeythatshouldbeatleast256characterslongsothatitcanbeusedforjwt"),
+				exp:    time.Hour * 24 * 3, // 3 days
+				iss:    env.GetString("TOKEN_ISSUER", "SocialApp"),
+			},
 		},
 	}
 
@@ -63,12 +69,16 @@ func main() {
 		logger.Fatalf("Error initializing mailer client: %v", err)
 	}
 
+	// Initialize the authenticator
+	jwtAuthenticator := auth.NewJWTAuthenticator(cfg.auth.token.secret, cfg.auth.token.iss, cfg.auth.token.iss)
+
 	// Create the application instance with the configuration and storage
 	app := &application{
-		config: cfg,
-		store:  storage,
-		logger: logger,
-		mailer: mailerClient,
+		config:        cfg,
+		store:         storage,
+		logger:        logger,
+		mailer:        mailerClient,
+		authenticator: jwtAuthenticator,
 	}
 
 	// Mount the routes and start the server

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/NR3101/social/internal/auth"
 	"github.com/NR3101/social/internal/mailer"
 	"github.com/NR3101/social/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -13,11 +14,11 @@ import (
 
 // application struct holds the configuration and storage for the application
 type application struct {
-	config config             // configuration for the application
-	store  store.Storage      // storage interface for database operations
-	logger *zap.SugaredLogger // logger for logging messages
-	mailer mailer.Client      // mailer client for sending emails
-
+	config        config             // configuration for the application
+	store         store.Storage      // storage interface for database operations
+	logger        *zap.SugaredLogger // logger for logging messages
+	mailer        mailer.Client      // mailer client for sending emails
+	authenticator auth.Authenticator // authenticator for handling user authentication
 }
 
 // config struct holds the database configuration
@@ -33,6 +34,14 @@ type config struct {
 // authConfig struct holds the authentication configuration
 type authConfig struct {
 	basic basicAuthConfig // configuration for basic authentication
+	token tokenAuthConfig // configuration for token-based authentication
+}
+
+// tokenAuthConfig struct holds the token-based authentication configuration
+type tokenAuthConfig struct {
+	secret string        // secret key for signing tokens
+	exp    time.Duration // expiration time for tokens
+	iss    string        // issuer of the tokens
 }
 
 // basicAuthConfig struct holds the basic authentication configuration
@@ -87,6 +96,8 @@ func (app *application) mount() http.Handler {
 
 		// Routes related to posts
 		r.Route("/posts", func(r chi.Router) {
+			r.Use(app.AuthTokenMiddleware) // Middleware to authenticate requests using token-based authentication
+
 			r.Post("/", app.createPostHandler) // Create a new post
 
 			r.Route("/{postID}", func(r chi.Router) {
@@ -104,26 +115,24 @@ func (app *application) mount() http.Handler {
 			r.Put("/activate/{token}", app.activateUserHandler) // Activate a user account with a token
 
 			r.Route("/{userID}", func(r chi.Router) {
-				// Middleware to extract user ID from URL and load the user into the request context
-				r.Use(app.usersContextMiddleware)
+				// Middleware to authenticate requests using token-based authentication
+				r.Use(app.AuthTokenMiddleware)
 
-				r.Get("/", app.getUserHandler) // Get a specific user by ID
-				//r.Delete("/", app.deleteUserHandler) // Delete a specific user by ID
-				//r.Patch("/", app.updateUserHandler)  // Update a specific user by ID
-
+				r.Get("/", app.getUserHandler)              // Get a specific user by ID
 				r.Put("/follow", app.followUserHandler)     // Follow a user
 				r.Put("/unfollow", app.unfollowUserHandler) // Unfollow a user
 			})
 
 			r.Group(func(r chi.Router) {
+				r.Use(app.AuthTokenMiddleware)         // Middleware to authenticate requests using token-based authentication
 				r.Get("/feed", app.getUserFeedHandler) // Get the feed for the authenticated user
 			})
-
 		})
 
 		// Routes related to authentication
 		r.Route("/authentication", func(r chi.Router) {
 			r.Post("/user", app.registerUserHandler) // Register a new user
+			r.Post("/token", app.createTokenHandler) // Create a new authentication token
 		})
 	})
 

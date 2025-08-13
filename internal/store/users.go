@@ -133,13 +133,32 @@ func (u *UserStore) createUserInvitation(ctx context.Context, tx *sql.Tx, token 
 
 // GetByID retrieves a user by their ID from the database.
 func (u *UserStore) GetByID(ctx context.Context, userID string) (*User, error) {
-	query := `SELECT id, username, email, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, username, email,password, created_at, updated_at FROM users WHERE id = $1`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	user := &User{}
-	err := u.db.QueryRowContext(ctx, query, userID).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	err := u.db.QueryRowContext(ctx, query, userID).Scan(&user.ID, &user.Username, &user.Email, &user.Password.hash, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	return user, nil
+}
+
+// GetByEmail retrieves a user by their email from the database.
+func (u *UserStore) GetByEmail(ctx context.Context, email string) (*User, error) {
+	query := `SELECT id, username, email, created_at, updated_at FROM users WHERE email = $1`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	user := &User{}
+	err := u.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound

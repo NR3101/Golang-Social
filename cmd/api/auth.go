@@ -3,10 +3,13 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/NR3101/social/internal/mailer"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"github.com/NR3101/social/internal/store"
@@ -23,6 +26,11 @@ type RegisterUserPayload struct {
 type UserWithToken struct {
 	*store.User
 	Token string `json:"token"` // Token for user activation or invitation
+}
+
+type CreateUserTokenPayload struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
 }
 
 // registerUserHandler handles user registration requests
@@ -109,6 +117,53 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := app.writeJSONResponse(w, http.StatusCreated, userWithToken); err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+}
+
+// createTokenHandler handles the creation of a token for user activation or invitation
+func (app *application) createTokenHandler(w http.ResponseWriter, r *http.Request) {
+	// Parse the request payload
+	var payload CreateUserTokenPayload
+	if err := readJSON(w, r, &payload); err != nil {
+		app.badRequestError(w, r, err)
+		return
+	}
+
+	// Validate the payload
+	if err := Validate.Struct(payload); err != nil {
+		app.badRequestError(w, r, err)
+		return
+	}
+
+	// Check if the user exists
+	user, err := app.store.Users.GetByEmail(r.Context(), payload.Email)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			app.unauthorizedError(w, r, err)
+		} else {
+			app.internalServerError(w, r, err)
+		}
+		return
+	}
+
+	// Generate the token with claims
+	claims := jwt.MapClaims{
+		"sub": user.ID,                                          // Subject (user ID)
+		"exp": time.Now().Add(app.config.auth.token.exp).Unix(), // Expiration time
+		"iat": time.Now().Unix(),                                // Issued at time
+		"nbf": time.Now().Unix(),                                // Not before time
+		"iss": app.config.auth.token.iss,                        // Issuer
+		"aud": app.config.auth.token.iss,                        // Audience
+	}
+	token, err := app.authenticator.GenerateToken(claims)
+	if err != nil {
+		app.internalServerError(w, r, err)
+		return
+	}
+
+	if err := app.writeJSONResponse(w, http.StatusCreated, token); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}

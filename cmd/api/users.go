@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/NR3101/social/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -21,23 +22,17 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Temporary later will be replaced with a proper authentication system
-type FollowingUser struct {
-	UserID int64 `json:"user_id"` // ID of the user who is following
-}
-
 // followUserHandler handles the following of a user by another user.
 func (app *application) followUserHandler(w http.ResponseWriter, r *http.Request) {
-	toFollowUser := app.getUserFromContext(r)
-
-	var payload FollowingUser
-	if err := readJSON(w, r, &payload); err != nil {
+	toFollowUser := app.getUserFromContext(r) // ID of the user to be followed
+	currentUserID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	if err != nil {
 		app.badRequestError(w, r, err)
 		return
 	}
 
 	ctx := r.Context()
-	if err := app.store.Followers.Follow(ctx, toFollowUser.ID, payload.UserID); err != nil {
+	if err := app.store.Followers.Follow(ctx, toFollowUser.ID, currentUserID); err != nil {
 		if errors.Is(err, store.ErrAlreadyFollowing) {
 			app.badRequestError(w, r, err)
 			return
@@ -55,15 +50,14 @@ func (app *application) followUserHandler(w http.ResponseWriter, r *http.Request
 // unfollowUserHandler handles the unfollowing of a user by another user.
 func (app *application) unfollowUserHandler(w http.ResponseWriter, r *http.Request) {
 	toUnfollowUser := app.getUserFromContext(r) // ID of the user to be unfollowed
-
-	var payload FollowingUser
-	if err := readJSON(w, r, &payload); err != nil {
+	currentUserID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	if err != nil {
 		app.badRequestError(w, r, err)
 		return
 	}
 
 	ctx := r.Context()
-	if err := app.store.Followers.Unfollow(ctx, toUnfollowUser.ID, payload.UserID); err != nil {
+	if err := app.store.Followers.Unfollow(ctx, toUnfollowUser.ID, currentUserID); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
