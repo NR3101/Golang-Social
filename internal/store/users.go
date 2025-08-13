@@ -47,6 +47,11 @@ func (p *password) Set(text string) error {
 	return nil
 }
 
+// Compare checks if the provided password matches the stored hash.
+func (p *password) Compare(text string) error {
+	return bcrypt.CompareHashAndPassword(p.hash, []byte(text))
+}
+
 // UserStore implements the Storage interface for user-related operations.
 type UserStore struct {
 	db *sql.DB
