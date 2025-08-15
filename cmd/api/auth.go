@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/NR3101/social/internal/mailer"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
@@ -51,6 +50,9 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	user := &store.User{
 		Username: payload.Username,
 		Email:    payload.Email,
+		Role: &store.Role{
+			Name: "user", // Default role for new users
+		},
 	}
 
 	// Hash the password and set it in the user struct
@@ -85,36 +87,41 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		Token: plainToken, // Include the plain token in the response
 	}
 
-	// email variables
-	isProdEnv := app.config.env == "production"
-	activationURL := fmt.Sprintf("%s/confirm/%s", app.config.frontendURL, plainToken)
-	vars := struct {
-		Username      string
-		ActivationURL string
-	}{
-		Username:      user.Username,
-		ActivationURL: activationURL,
-	}
-
-	// Send the welcome email using the mailer client
-	_, err := app.mailer.Send(
-		mailer.UserWelcomeTemplate,
-		user.Username,
-		user.Email,
-		vars,
-		!isProdEnv,
-	)
-	if err != nil {
-		app.logger.Errorw("failed to send welcome email", "error", err, "email", user.Email)
-
-		// rollback user creation if email sending fails(SAGA pattern)
-		if err := app.store.Users.Delete(ctx, user.ID); err != nil {
-			app.logger.Errorw("failed to rollback user creation after email failure", "error", err, "userID", user.ID)
+	// Skip email sending for testing - comment out the email section
+	/*
+		// email variables
+		isProdEnv := app.config.env == "production"
+		activationURL := fmt.Sprintf("%s/confirm/%s", app.config.frontendURL, plainToken)
+		vars := struct {
+			Username      string
+			ActivationURL string
+		}{
+			Username:      user.Username,
+			ActivationURL: activationURL,
 		}
 
-		app.internalServerError(w, r, err)
-		return
-	}
+		// Send the welcome email using the mailer client
+		_, err := app.mailer.Send(
+			mailer.UserWelcomeTemplate,
+			user.Username,
+			user.Email,
+			vars,
+			!isProdEnv,
+		)
+		if err != nil {
+			app.logger.Errorw("failed to send welcome email", "error", err, "email", user.Email)
+
+			// rollback user creation if email sending fails(SAGA pattern)
+			if err := app.store.Users.Delete(ctx, user.ID); err != nil {
+				app.logger.Errorw("failed to rollback user creation after email failure", "error", err, "userID", user.ID)
+			}
+
+			app.internalServerError(w, r, err)
+			return
+		}
+	*/
+
+	app.logger.Infow("User registered successfully (email disabled for testing)", "userID", user.ID, "token", plainToken)
 
 	if err := app.writeJSONResponse(w, http.StatusCreated, userWithToken); err != nil {
 		app.internalServerError(w, r, err)
@@ -137,22 +144,32 @@ func (app *application) createTokenHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Add debug logging
+	app.logger.Infow("Authentication attempt", "email", payload.Email)
+
 	// Check if the user exists
 	user, err := app.store.Users.GetByEmail(r.Context(), payload.Email)
 	if err != nil {
+		app.logger.Errorw("User lookup failed", "email", payload.Email, "error", err)
 		if errors.Is(err, store.ErrNotFound) {
-			app.unauthorizedError(w, r, err)
+			app.unauthorizedError(w, r, fmt.Errorf("invalid credentials"))
 		} else {
 			app.internalServerError(w, r, err)
 		}
 		return
 	}
 
+	// Add debug logging for user status
+	app.logger.Infow("User found", "userID", user.ID, "email", user.Email, "isActive", user.IsActive)
+
 	// Verify the password is correct
 	if err := user.Password.Compare(payload.Password); err != nil {
+		app.logger.Errorw("Password comparison failed", "userID", user.ID, "error", err)
 		app.unauthorizedError(w, r, fmt.Errorf("invalid credentials"))
 		return
 	}
+
+	app.logger.Infow("Authentication successful", "userID", user.ID)
 
 	// Generate the token with claims
 	claims := jwt.MapClaims{

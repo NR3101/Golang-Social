@@ -43,3 +43,10 @@ func (app *application) unauthorizedBasicAuthError(w http.ResponseWriter, r *htt
 
 	writeJSONError(w, http.StatusUnauthorized, "unauthorized access to the requested resource")
 }
+
+// forbiddenError handles forbidden errors and writes a JSON response.
+func (app *application) forbiddenError(w http.ResponseWriter, r *http.Request) {
+	app.logger.Errorw("forbidden error", "method", r.Method, "path", r.URL.Path)
+
+	writeJSONError(w, http.StatusForbidden, "you do not have permission to access this resource")
+}

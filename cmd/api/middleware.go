@@ -8,8 +8,47 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/NR3101/social/internal/store"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// checkPostOwnership is an authorization middleware that checks if the user is the owner of a post.
+func (app *application) checkPostOwnership(requiredRole string, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.getUserFromContext(r)
+		post := app.getPostFromContext(r)
+
+		// check if the user is the owner of the post
+		if user.ID == post.UserID {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// check if the user has the required role to access the resource
+		allowed, err := app.checkRolePrecedence(r.Context(), user, requiredRole)
+		if err != nil {
+			app.internalServerError(w, r, err)
+			return
+		}
+
+		if !allowed {
+			app.forbiddenError(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// checkRolePrecedence checks if the user has the required role to access the resource.
+func (app *application) checkRolePrecedence(ctx context.Context, user *store.User, roleName string) (bool, error) {
+	role, err := app.store.Roles.GetByName(ctx, roleName)
+	if err != nil {
+		return false, err
+	}
+
+	return user.Role.Level >= role.Level, nil
+}
 
 // AuthTokenMiddleware is a middleware function that implements token-based authentication.
 func (app *application) AuthTokenMiddleware(next http.Handler) http.Handler {

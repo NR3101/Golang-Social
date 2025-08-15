@@ -45,6 +45,11 @@ type Storage struct {
 		Follow(ctx context.Context, toFollowID int64, userID int64) error     // Follow another user
 		Unfollow(ctx context.Context, toUnfollowID int64, userID int64) error // Unfollow another user
 	}
+
+	// Roles provides methods for managing user roles.
+	Roles interface {
+		GetByName(ctx context.Context, name string) (*Role, error) // Get role by name
+	}
 }
 
 // NewStorage creates a new Storage instance with the provided database connection.
@@ -54,6 +59,7 @@ func NewStorage(db *sql.DB) Storage {
 		Users:     &UserStore{db},
 		Comments:  &CommentStore{db},
 		Followers: &FollowerStore{db},
+		Roles:     &RoleStore{db},
 	}
 }
 

@@ -27,6 +27,8 @@ type User struct {
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
 	IsActive  bool     `json:"is_active"` // Indicates if the user account is active
+	RoleID    int64    `json:"role_id"`   // Role ID for user permissions
+	Role      *Role    `json:"role"`      // Role details, if needed
 }
 
 type password struct {
@@ -59,13 +61,20 @@ type UserStore struct {
 
 // Create inserts a new user into the database.
 func (u *UserStore) Create(ctx context.Context, tx *sql.Tx, user *User) error {
-	query := `INSERT INTO users (username, email, password) VALUES ($1, $2, $3)
-			RETURNING id, created_at, updated_at`
+	query := `INSERT INTO users (username, email, password, role_id) VALUES ($1, $2, $3, (
+    		  SELECT id FROM roles WHERE name = $4 LIMIT 1))
+			  RETURNING id, created_at, updated_at`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	err := tx.QueryRowContext(ctx, query, user.Username, user.Email, user.Password.hash).
+	// Ensure the user has a valid role
+	role := user.Role.Name
+	if role == "" {
+		role = "user" // Default to "user" role if not set
+	}
+
+	err := tx.QueryRowContext(ctx, query, user.Username, user.Email, user.Password.hash, role).
 		Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		switch {
@@ -138,13 +147,28 @@ func (u *UserStore) createUserInvitation(ctx context.Context, tx *sql.Tx, token 
 
 // GetByID retrieves a user by their ID from the database.
 func (u *UserStore) GetByID(ctx context.Context, userID string) (*User, error) {
-	query := `SELECT id, username, email,password, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT users.id, username, email, password, roles.id, roles.name, roles.description, roles.level, created_at, updated_at, is_active
+     FROM users JOIN roles ON users.role_id = roles.id
+     WHERE users.id = $1 AND is_active = true`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	user := &User{}
-	err := u.db.QueryRowContext(ctx, query, userID).Scan(&user.ID, &user.Username, &user.Email, &user.Password.hash, &user.CreatedAt, &user.UpdatedAt)
+	user := &User{
+		Role: &Role{},
+	}
+	err := u.db.QueryRowContext(ctx, query, userID).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Email,
+		&user.Password.hash,
+		&user.Role.ID,
+		&user.Role.Name,
+		&user.Role.Description,
+		&user.Role.Level,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.IsActive)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -157,13 +181,14 @@ func (u *UserStore) GetByID(ctx context.Context, userID string) (*User, error) {
 
 // GetByEmail retrieves a user by their email from the database.
 func (u *UserStore) GetByEmail(ctx context.Context, email string) (*User, error) {
-	query := `SELECT id, username, email, created_at, updated_at FROM users WHERE email = $1`
+	query := `SELECT id, username, email, password, created_at, updated_at, is_active FROM users WHERE email = $1
+AND is_active = true`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	user := &User{}
-	err := u.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	err := u.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.Password.hash, &user.CreatedAt, &user.UpdatedAt, &user.IsActive)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound

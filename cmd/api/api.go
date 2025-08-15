@@ -104,9 +104,11 @@ func (app *application) mount() http.Handler {
 				// Middleware to extract post ID from URL and load the post into the request context
 				r.Use(app.postsContextMiddleware)
 
-				r.Get("/", app.getPostHandler)       // Get a specific post by ID
-				r.Delete("/", app.deletePostHandler) // Delete a specific post by ID
-				r.Patch("/", app.updatePostHandler)  // Update a specific post by ID
+				r.Get("/", app.getPostHandler) // Get a specific post by ID
+				// Delete a specific post by ID with ownership check
+				r.Delete("/", app.checkPostOwnership("admin", app.deletePostHandler))
+				// Update a specific post by ID with ownership check
+				r.Patch("/", app.checkPostOwnership("moderator", app.updatePostHandler))
 			})
 		})
 

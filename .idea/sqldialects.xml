@@ -7,6 +7,7 @@
     <file url="file://$PROJECT_DIR$/cmd/migrate/migrations/000004_add_comments.up.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/cmd/migrate/migrations/000007_add_indexes.up.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/cmd/migrate/migrations/000009_add_activated_to_user.down.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/cmd/migrate/migrations/000013_add_role_to_user_table.up.sql" dialect="PostgreSQL" />
     <file url="PROJECT" dialect="PostgreSQL" />
   </component>
 </project>
