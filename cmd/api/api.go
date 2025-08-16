@@ -7,6 +7,7 @@ import (
 	"github.com/NR3101/social/internal/auth"
 	"github.com/NR3101/social/internal/mailer"
 	"github.com/NR3101/social/internal/store"
+	"github.com/NR3101/social/internal/store/cache"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
@@ -16,9 +17,11 @@ import (
 type application struct {
 	config        config             // configuration for the application
 	store         store.Storage      // storage interface for database operations
+	cacheStorage  cache.Storage      // cache storage interface for caching operations
 	logger        *zap.SugaredLogger // logger for logging messages
 	mailer        mailer.Client      // mailer client for sending emails
 	authenticator auth.Authenticator // authenticator for handling user authentication
+
 }
 
 // config struct holds the database configuration
@@ -27,8 +30,17 @@ type config struct {
 	db          dbConfig
 	env         string
 	mail        mailConfig
-	frontendURL string     // URL for the frontend application
-	auth        authConfig // authentication configuration
+	frontendURL string      // URL for the frontend application
+	auth        authConfig  // authentication configuration
+	redisCfg    redisConfig // Redis configuration for caching
+}
+
+// redisConfig struct holds the Redis configuration
+type redisConfig struct {
+	addr     string // address of the Redis server
+	password string // password for the Redis server
+	db       int    // Redis database number
+	enabled  bool   // flag to enable or disable Redis caching
 }
 
 // authConfig struct holds the authentication configuration

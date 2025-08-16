@@ -8,6 +8,8 @@ import (
 	"github.com/NR3101/social/internal/env"
 	"github.com/NR3101/social/internal/mailer"
 	"github.com/NR3101/social/internal/store"
+	"github.com/NR3101/social/internal/store/cache"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -22,6 +24,12 @@ func main() {
 			maxOpenConns: env.GetInt("DB_MAX_OPEN_CONNS", 25),
 			maxIdleConns: env.GetInt("DB_MAX_IDLE_CONNS", 25),
 			maxIdleTime:  env.GetString("DB_MAX_IDLE_TIME", "15m"),
+		},
+		redisCfg: redisConfig{
+			addr:     env.GetString("REDIS_ADDR", "localhost:6379"),
+			password: env.GetString("REDIS_PASSWORD", ""),
+			db:       env.GetInt("REDIS_DB", 0),
+			enabled:  env.GetBool("REDIS_ENABLED", true),
 		},
 		env: env.GetString("ENV", "development"),
 		mail: mailConfig{
@@ -59,14 +67,22 @@ func main() {
 	defer db.Close()
 	logger.Info("Connected to database pool successfully")
 
+	// Redis Cache initialization
+	var redisCache *redis.Client
+	if cfg.redisCfg.enabled {
+		redisCache = cache.NewRedisClient(cfg.redisCfg.addr, cfg.redisCfg.password, cfg.redisCfg.db)
+		logger.Info("Connected to Redis cache successfully")
+	}
+
 	// Pass the database connection to the storage layer
 	storage := store.NewStorage(db)
+	cacheStorage := cache.NewRedisStorage(redisCache)
 
 	// Initialize the mailer client
 	// mailerClient := mailer.NewSendGridMailer(cfg.mail.fromEmail, cfg.mail.sendGrid.apiKey)
 	mailerClient, err := mailer.NewMailTrapClient(cfg.mail.mailTrap.apiKey, cfg.mail.fromEmail)
 	if err != nil {
-		logger.Fatalf("Error initializing mailer client: %v", err)
+		logger.Info("Error initializing mailer client: %v", err)
 	}
 
 	// Initialize the authenticator
@@ -76,6 +92,7 @@ func main() {
 	app := &application{
 		config:        cfg,
 		store:         storage,
+		cacheStorage:  cacheStorage,
 		logger:        logger,
 		mailer:        mailerClient,
 		authenticator: jwtAuthenticator,

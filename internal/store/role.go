@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 type Role struct {
@@ -25,7 +26,7 @@ func (s *RoleStore) GetByName(ctx context.Context, name string) (*Role, error) {
 	role := &Role{}
 	err := row.Scan(&role.ID, &role.Name, &role.Description, &role.Level)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound // Role not found
 		}
 		return nil, err // Other error

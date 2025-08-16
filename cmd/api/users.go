@@ -12,13 +12,26 @@ import (
 
 // getUserHandler handles the retrieval of a specific user by ID.
 func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the user from the request context
-	user := app.getUserFromContext(r)
+	userID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	if err != nil {
+		app.badRequestError(w, r, err)
+		return
+	}
 
-	// Write the user as a JSON response
+	user, err := app.getUser(r.Context(), strconv.FormatInt(userID, 10))
+	if err != nil {
+		switch err {
+		case store.ErrNotFound:
+			app.notFoundError(w, r, err)
+			return
+		default:
+			app.internalServerError(w, r, err)
+			return
+		}
+	}
+
 	if err := app.writeJSONResponse(w, http.StatusOK, user); err != nil {
 		app.internalServerError(w, r, err)
-		return
 	}
 }
 
@@ -101,7 +114,7 @@ func (app *application) usersContextMiddleware(next http.Handler) http.Handler {
 		ctx := r.Context()
 		user, err := app.store.Users.GetByID(ctx, userID)
 		if err != nil {
-			if err == store.ErrNotFound {
+			if errors.Is(err, store.ErrNotFound) {
 				app.notFoundError(w, r, err)
 				return
 			}

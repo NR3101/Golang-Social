@@ -14,7 +14,7 @@ import (
 
 // checkPostOwnership is an authorization middleware that checks if the user is the owner of a post.
 func (app *application) checkPostOwnership(requiredRole string, next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		user := app.getUserFromContext(r)
 		post := app.getPostFromContext(r)
 
@@ -37,7 +37,7 @@ func (app *application) checkPostOwnership(requiredRole string, next http.Handle
 		}
 
 		next.ServeHTTP(w, r)
-	})
+	}
 }
 
 // checkRolePrecedence checks if the user has the required role to access the resource.
@@ -83,9 +83,9 @@ func (app *application) AuthTokenMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// retrieve the user from the database
+		// retrieve the user from the cache or database
 		ctx := r.Context()
-		user, err := app.store.Users.GetByID(ctx, fmt.Sprintf("%d", userID))
+		user, err := app.getUser(ctx, strconv.FormatInt(userID, 10))
 		if err != nil {
 			app.unauthorizedError(w, r, err)
 			return
@@ -96,6 +96,31 @@ func (app *application) AuthTokenMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 
+}
+
+// getUser retrieves a user from the cache or database.
+func (app *application) getUser(ctx context.Context, userID string) (*store.User, error) {
+	if !app.config.redisCfg.enabled {
+		return app.store.Users.GetByID(ctx, userID)
+	}
+
+	user, err := app.cacheStorage.Users.Get(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user == nil {
+		user, err = app.store.Users.GetByID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := app.cacheStorage.Users.Set(ctx, user); err != nil {
+			return nil, err
+		}
+	}
+
+	return user, nil
 }
 
 // BasicAuthMiddleware is a middleware function that implements basic authentication.
