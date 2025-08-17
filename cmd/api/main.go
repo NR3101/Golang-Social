@@ -7,6 +7,7 @@ import (
 	"github.com/NR3101/social/internal/db"
 	"github.com/NR3101/social/internal/env"
 	"github.com/NR3101/social/internal/mailer"
+	"github.com/NR3101/social/internal/rateLimiter"
 	"github.com/NR3101/social/internal/store"
 	"github.com/NR3101/social/internal/store/cache"
 	"github.com/redis/go-redis/v9"
@@ -53,6 +54,11 @@ func main() {
 				iss:    env.GetString("TOKEN_ISSUER", "SocialApp"),
 			},
 		},
+		rateLimiter: rateLimiter.Config{
+			RequestPerTimeFrame: env.GetInt("RATE_LIMITER_REQUESTS_PER_TIME_FRAME", 20),
+			TimeFrame:           time.Second * 5,
+			Enabled:             env.GetBool("RATE_LIMITER_ENABLED", true),
+		},
 	}
 
 	// logger initialization
@@ -73,6 +79,12 @@ func main() {
 		redisCache = cache.NewRedisClient(cfg.redisCfg.addr, cfg.redisCfg.password, cfg.redisCfg.db)
 		logger.Info("Connected to Redis cache successfully")
 	}
+
+	// Initialize the rate limiter
+	fixedWindowRateLimiter := rateLimiter.NewFixedWindowRateLimiter(
+		cfg.rateLimiter.RequestPerTimeFrame,
+		cfg.rateLimiter.TimeFrame,
+	)
 
 	// Pass the database connection to the storage layer
 	storage := store.NewStorage(db)
@@ -96,6 +108,7 @@ func main() {
 		logger:        logger,
 		mailer:        mailerClient,
 		authenticator: jwtAuthenticator,
+		rateLimiter:   fixedWindowRateLimiter,
 	}
 
 	// Mount the routes and start the server

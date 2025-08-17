@@ -11,6 +11,7 @@ import (
 
 	"github.com/NR3101/social/internal/auth"
 	"github.com/NR3101/social/internal/mailer"
+	"github.com/NR3101/social/internal/rateLimiter"
 	"github.com/NR3101/social/internal/store"
 	"github.com/NR3101/social/internal/store/cache"
 	"github.com/go-chi/chi/v5"
@@ -20,13 +21,13 @@ import (
 
 // application struct holds the configuration and storage for the application
 type application struct {
-	config        config             // configuration for the application
-	store         store.Storage      // storage interface for database operations
-	cacheStorage  cache.Storage      // cache storage interface for caching operations
-	logger        *zap.SugaredLogger // logger for logging messages
-	mailer        mailer.Client      // mailer client for sending emails
-	authenticator auth.Authenticator // authenticator for handling user authentication
-
+	config        config              // configuration for the application
+	store         store.Storage       // storage interface for database operations
+	cacheStorage  cache.Storage       // cache storage interface for caching operations
+	logger        *zap.SugaredLogger  // logger for logging messages
+	mailer        mailer.Client       // mailer client for sending emails
+	authenticator auth.Authenticator  // authenticator for handling user authentication
+	rateLimiter   rateLimiter.Limiter // rate limiter for controlling request rates
 }
 
 // config struct holds the database configuration
@@ -35,9 +36,10 @@ type config struct {
 	db          dbConfig
 	env         string
 	mail        mailConfig
-	frontendURL string      // URL for the frontend application
-	auth        authConfig  // authentication configuration
-	redisCfg    redisConfig // Redis configuration for caching
+	frontendURL string             // URL for the frontend application
+	auth        authConfig         // authentication configuration
+	redisCfg    redisConfig        // Redis configuration for caching
+	rateLimiter rateLimiter.Config // rate limiting configuration
 }
 
 // redisConfig struct holds the Redis configuration
@@ -98,10 +100,11 @@ func (app *application) mount() http.Handler {
 	r := chi.NewRouter() // create a new router
 
 	// A good base middleware stack
-	r.Use(middleware.RequestID) // adds a unique request ID to each request
-	r.Use(middleware.RealIP)    // extracts the real IP address of the client
-	r.Use(middleware.Logger)    // logs the start and end of each request
-	r.Use(middleware.Recoverer) // recovers from panics and writes a 500 response
+	r.Use(middleware.RequestID)      // adds a unique request ID to each request
+	r.Use(middleware.RealIP)         // extracts the real IP address of the client
+	r.Use(middleware.Logger)         // logs the start and end of each request
+	r.Use(middleware.Recoverer)      // recovers from panics and writes a 500 response
+	r.Use(app.RateLimiterMiddleware) // custom middleware for rate limiting
 
 	// Set a timeout value on the request context (ctx), that will signal through ctx.Done() that the request has timed out and further processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))

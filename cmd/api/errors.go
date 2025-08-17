@@ -50,3 +50,13 @@ func (app *application) forbiddenError(w http.ResponseWriter, r *http.Request) {
 
 	writeJSONError(w, http.StatusForbidden, "you do not have permission to access this resource")
 }
+
+// rateLimitExceededError handles rate limit exceeded errors and writes a JSON response.
+func (app *application) rateLimitExceededError(w http.ResponseWriter, r *http.Request, retryAfter string) {
+	app.logger.Errorw("rate limit exceeded error", "method", r.Method, "path", r.URL.Path)
+
+	// Set the Retry-After header to indicate when the client can retry the request
+	w.Header().Set("Retry-After", retryAfter)
+
+	writeJSONError(w, http.StatusTooManyRequests, "rate limit exceeded, please try again after "+retryAfter)
+}
