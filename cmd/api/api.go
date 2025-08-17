@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/NR3101/social/internal/auth"
@@ -163,7 +168,45 @@ func (app *application) run(mux http.Handler) error {
 		IdleTimeout:  time.Minute,      // idle connections timeout
 	}
 
+	// Code to handle GRACEFUL SHUTDOWN of the server
+
+	shutdown := make(chan error) // channel to signal shutdown completion
+
+	// Goroutine to listen for OS signals (SIGINT, SIGTERM) and initiate graceful shutdown
+	go func() {
+		quit := make(chan os.Signal, 1) // channel to receive OS signals
+
+		// Notify the quit channel on receiving SIGINT or SIGTERM signals
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		s := <-quit // wait for a signal
+
+		// Create a context with a timeout for the shutdown process
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Log the signal received
+		app.logger.Infow("Signal caught", "signal", s.String())
+
+		shutdown <- srv.Shutdown(ctx) // initiate graceful shutdown of the server
+	}()
+
+	// Start the HTTP server
 	app.logger.Infow("Server started", "addr", app.config.addr, "env", app.config.env)
 
-	return srv.ListenAndServe()
+	// Listen and serve HTTP requests
+	err := srv.ListenAndServe()
+	// If the server is closed gracefully, it will return http.ErrServerClosed
+	if !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	// Wait for the shutdown signal to complete
+	err = <-shutdown
+	if err != nil {
+		return err
+	}
+
+	// Log the successful shutdown of the server
+	app.logger.Infow("Server gracefully stopped", "addr", app.config.addr, "env", app.config.env)
+	return nil
 }
