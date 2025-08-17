@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/NR3101/social/internal/auth"
+	"github.com/NR3101/social/internal/env"
 	"github.com/NR3101/social/internal/mailer"
 	"github.com/NR3101/social/internal/rateLimiter"
 	"github.com/NR3101/social/internal/store"
 	"github.com/NR3101/social/internal/store/cache"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"go.uber.org/zap"
 )
 
@@ -100,10 +102,19 @@ func (app *application) mount() http.Handler {
 	r := chi.NewRouter() // create a new router
 
 	// A good base middleware stack
-	r.Use(middleware.RequestID)      // adds a unique request ID to each request
-	r.Use(middleware.RealIP)         // extracts the real IP address of the client
-	r.Use(middleware.Logger)         // logs the start and end of each request
-	r.Use(middleware.Recoverer)      // recovers from panics and writes a 500 response
+	r.Use(middleware.RequestID) // adds a unique request ID to each request
+	r.Use(middleware.RealIP)    // extracts the real IP address of the client
+	r.Use(middleware.Logger)    // logs the start and end of each request
+	r.Use(middleware.Recoverer) // recovers from panics and writes a 500 response
+	// CORS (Cross-Origin Resource Sharing) middleware to allow cross-origin requests
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{env.GetString("CORS_ALLOWED_ORIGIN", "http://localhost:3000")},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}))
 	r.Use(app.RateLimiterMiddleware) // custom middleware for rate limiting
 
 	// Set a timeout value on the request context (ctx), that will signal through ctx.Done() that the request has timed out and further processing should be stopped.
