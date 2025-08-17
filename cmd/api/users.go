@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -105,28 +104,28 @@ func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Reque
 }
 
 // usersContextMiddleware extracts the user ID from the URL and loads the user into the request context.
-func (app *application) usersContextMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract the user ID from the URL parameters
-		userID := chi.URLParam(r, "userID")
-
-		// Retrieve the user from the store by ID
-		ctx := r.Context()
-		user, err := app.store.Users.GetByID(ctx, userID)
-		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				app.notFoundError(w, r, err)
-				return
-			}
-			app.internalServerError(w, r, err)
-			return
-		}
-
-		// Store the user in the request context
-		ctx = context.WithValue(ctx, "user", user)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
+//func (app *application) usersContextMiddleware(next http.Handler) http.Handler {
+//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//		// Extract the user ID from the URL parameters
+//		userID := chi.URLParam(r, "userID")
+//
+//		// Retrieve the user from the store by ID
+//		ctx := r.Context()
+//		user, err := app.store.Users.GetByID(ctx, userID)
+//		if err != nil {
+//			if errors.Is(err, store.ErrNotFound) {
+//				app.notFoundError(w, r, err)
+//				return
+//			}
+//			app.internalServerError(w, r, err)
+//			return
+//		}
+//
+//		// Store the user in the request context
+//		ctx = context.WithValue(ctx, "user", user)
+//		next.ServeHTTP(w, r.WithContext(ctx))
+//	})
+//}
 
 // getUserFromContext retrieves the user from the request context.
 func (app *application) getUserFromContext(r *http.Request) *store.User {
