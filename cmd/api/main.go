@@ -1,6 +1,8 @@
 package main
 
 import (
+	"expvar"
+	"runtime"
 	"time"
 
 	"github.com/NR3101/social/internal/auth"
@@ -110,6 +112,16 @@ func main() {
 		authenticator: jwtAuthenticator,
 		rateLimiter:   fixedWindowRateLimiter,
 	}
+
+	// Send metrics using expvar
+	expvar.NewString("version").Set(version) // Register the version of the application
+	// Register the database and goroutine stats
+	expvar.Publish("database", expvar.Func(func() any {
+		return db.Stats()
+	}))
+	expvar.Publish("goroutines", expvar.Func(func() any {
+		return runtime.NumGoroutine()
+	}))
 
 	// Mount the routes and start the server
 	mux := app.mount()

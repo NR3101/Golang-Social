@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"expvar"
 	"net/http"
 	"os"
 	"os/signal"
@@ -124,6 +125,8 @@ func (app *application) mount() http.Handler {
 	r.Route("/v1", func(r chi.Router) {
 		// GET endpoint for health check with basic authentication
 		r.With(app.BasicAuthMiddleware()).Get("/health", app.healthCheckHandler) // Health check endpoint
+		// GET endpoint for expvar metrics with basic authentication
+		r.With(app.BasicAuthMiddleware()).Get("/metrics", expvar.Handler().ServeHTTP)
 
 		// Routes related to posts
 		r.Route("/posts", func(r chi.Router) {
